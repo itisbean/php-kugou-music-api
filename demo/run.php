@@ -16,5 +16,5 @@ $ret = $api->search('容祖儿');
 // $ret = $api->getAlbumSongs('39618301');
 // $ret = $api->getSongRankTop([171444851,277577912]);
 // $ret = $api->getSongCommentNum('3AF29B9361BFC1FCFC8C1D8B5EADA11F');
-$ret = $api->getChartSongs();
+$ret = $api->getSingersRankInfo('容祖儿');
 echo json_encode($ret, JSON_UNESCAPED_UNICODE)."\n";

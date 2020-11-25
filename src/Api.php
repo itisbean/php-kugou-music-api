@@ -365,15 +365,13 @@ class Api
      * @param integer $chartId
      * @return array
      */
-    public function getChartSongs($chartId)
+    public function getChartSongs($rankId, $volid = '')
     {
-        $url = 'http://mobilecdnbj.kugou.com/api/v3/rank/song';
+        // 榜单信息
+        $url = 'http://mobilecdnbj.kugou.com/api/v3/rank/info';
         $param = [
             'version' => 9108,
-            'plat' => 0,
-            'page' => 1,
-            'pagesize' => 500,
-            'rankid' => $chartId
+            'rankid' => $rankId
         ];
         $url .= '?' . http_build_query($param);
         try {
@@ -383,10 +381,34 @@ class Api
         }
         $result = $response->getBody()->getContents();
         $result = json_decode($result, true);
+        if ($result['errcode'] != 0) {
+            return $this->_error($result['error']);
+        }
+        $info = $result['data'];
+        // 榜单歌曲
+        $url = 'http://mobilecdnbj.kugou.com/api/v3/rank/song';
+        $param = [
+            'version' => 9108,
+            // 'plat' => 0,
+            'page' => 1,
+            'pagesize' => 500,
+            'rankid' => $rankId
+        ];
+        if ($volid) {
+            $param['volid'] = $volid;
+        }
+        $url .= '?' . http_build_query($param);
+        try {
+            $response = $this->_client->get($url);
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            return $this->_error('get chart songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        }
+        $result = $response->getBody()->getContents();
+        $result = json_decode($result, true);
         $data = $result['data']['info'] ?: [];
         $songs = [];
         foreach ($data as $key => $val) {
-            $filename = explode(',', $val['filename']);
+            $filename = explode('-', $val['filename']);
             $songs[] = [
                 'id' => $val['audio_id'],
                 'album_id' => $val['album_id'],
@@ -397,26 +419,67 @@ class Api
                 'sing_name' => rtrim($filename[0]),
                 'album_audio_id' => $val['album_audio_id'],
                 'rank' => $key + 1,
-                'update_type' => in_array($chartId, ChartConfig::$dayCharts) ? 1 : 0
+                'update_type' => in_array($rankId, ChartConfig::$dayCharts) ? 1 : 0,
+                'rank_title' => $info['rankname'],
+                'top_id' => $rankId
             ];
         }
         return $this->_success($songs);
     }
 
 
-        /**
+    /**
+     * 获取往期榜单歌曲
+     * @param integer $rankId
+     * @return array
+     */
+    public function getHistoryChartSongs($rankId)
+    {
+        $url = 'http://mobilecdnbj.kugou.com/api/v3/rank/vol';
+        $param = [
+            'version' => 9108,
+            'rankid' => $rankId
+        ];
+        $url .= '?' . http_build_query($param);
+        try {
+            $response = $this->_client->get($url);
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            return $this->_error('get history chart songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        }
+        $result = $response->getBody()->getContents();
+        $result = json_decode($result, true);
+        echo json_encode($result, JSON_UNESCAPED_UNICODE)."\n";die;
+        if ($result['errcode'] != 0) {
+            return $this->_error($result['error']);
+        }
+        $data = $result['data']['info'][0]['vols'] ?: [];
+        $ranklist = [];
+        foreach ($data as $vol) {
+            $songs = $this->getChartSongs($rankId, $vol['volid'])['data'];
+            if ($songs) {
+                foreach ($songs as $key => $val) {
+                    $songs[$key]['title_share'] = $val['title'].'-'.$vol['title'];
+                }
+                $ranklist = array_merge($ranklist, $songs);
+            }
+        }
+        return $this->_success($ranklist);
+    }
+
+
+    /**
      * 获取歌手排行榜数据
      * @param string $singerName 歌手名
      * @param array $rankIds 排行榜ID，为空就用配置中默认的
      * @return array
      */
     public function getSingersRankInfo($singerName, $rankIds = [])
-    {
-        $rankInfo = [];
+    { 
         if (!$rankIds) {
             // 配置中包含的榜单
             $rankIds = array_merge(ChartConfig::$dayCharts, ChartConfig::$weekCharts);
         }
+        $songs = [];
         foreach ($rankIds as $rankId) {
             $data = $this->getChartSongs($rankId);
             if ($data['ret']) {
@@ -428,20 +491,12 @@ class Api
                 }
                 $list = array_values($list);
                 if ($list) {
-                    $rankInfo[] = [
-                        'topId' => $rankId,
-                        'updateType' => $data['update_type'],
-                        'title' => $data['title'],
-                        'titleShare' => $data['titleShare'],
-                        'period' => $data['period'],
-                        'updateTime' => $data['updateTime'],
-                        'song' => $list
-                    ];
+                    $songs = array_merge($songs, $list);
                 }
             }
             usleep(500);
         }
-        return $this->_success($rankInfo);
+        return $this->_success($songs);
     }
 
 
