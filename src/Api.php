@@ -3,9 +3,9 @@
 namespace kugouMusic;
 
 use GuzzleHttp\Client;
-use kugouMusic\Storage;
 
-class Api {
+class Api
+{
 
     protected $_client;
 
@@ -18,78 +18,45 @@ class Api {
     /**
      * 搜索
      * @param string $keyword
-     * @param string $type 可选 track,album,artist,playlist
-     * @param integer $page 页数，默认1
-     * @param integer $pageSize 每页条数，默认15，最大50
      * @return array
      */
-    public function search($keyword, $type = '', $page = 1, $pageSize = 15)
+    public function search($keyword)
     {
-        $page > 0 || $page = 1;
-        $pageSize > 0 || $pageSize = 15;
-        $url = 'https://api.kkbox.com/v1.1/search';
+        $url = 'https://gateway.kugou.com/api/v3/search/keyword_recommend_multi';
         $param = [
-            'q' => $keyword,
-            'type' => $type ?: 'track,album,artist,playlist',
-            'territory' => 'HK', // 可选 HK,JP,MY,SG,TW
-            'offset' => ($page - 1) * $pageSize,
-            'limit' => $pageSize
+            'apiver' => '14',
+            'osversion' => '6.0.1',
+            'plat' => '0',
+            'nocorrect' => '0',
+            'userid' => '0',
+            'version' => '0',
+            'keyword' => $keyword
         ];
-        $url .= '?'.http_build_query($param);
-
-        $option = ['headers' => ['authorization' => 'Bearer '. $this->_getToken()]];
-        if ($this->_proxy) {
-            $option['proxy'] = $this->_proxy;
-        }
+        $url .= '?' . http_build_query($param);
         try {
-            $response = $this->_client->get($url, $option);
+            $response = $this->_client->get($url, [
+                'headers' => ['x-router' => 'msearch.kugou.com']
+            ]);
         } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get token failed, [' . $e->getCode().'] '. $e->getMessage());
+            return $this->_error('search failed, [' . $e->getCode() . '] ' . $e->getMessage());
         }
         $result = $response->getBody()->getContents();
-        $data = json_decode($result, true);
+        $result = json_decode($result, true);
+        if ($result['errcode'] != 0) {
+            return $this->_error($result['error']);
+        }
+        $data = $result['data']['info'] ?: [];
         return $this->_success($data);
     }
 
 
     /**
      * 获取歌手信息
-     * @param string $singerId 歌手ID
+     * @param integer $singerId 歌手ID
      * @return array
      */
     public function getSingerInfo($singerId)
     {
-        $url = "https://gateway.kugou.com/v1/getfansnum";
-        $param = [
-            'appid' => 1000,
-            // 'clientver' => 10329,
-            // 'mid' => '95057cefcf0df9c68c56c389c86514661c85d345',
-            // 'clienttime' => 1606136436,
-            // 'key' => '4d68dddcd82e5eed74f9c01771e5a4c5',
-            // 'p' => 'C6C1A5E29B8A35B6B833102949B7D60AAE97BC88BC3F777A7BE23FC3DDF034FA059BBDD2F87FE375CB64675B413A9D33DC5CB924086823AD6DC5B5581D721304A7A6A57349DC159A23C6019B36E6476983FE2D13103A49B09A5D8EB7F4BAB544FADA9494C83041858D3B6C163059860259CD62CEE961812A10F4B2DCBCF601AE',
-            'p' => '06DD344443BB68275C6313F63F5258502868AAD20D5C7FE126BCD2DC73F3AB5DE1BC7A61244ECD1F5A51C5BEDC5005CC246E00F6770DA471E9882DD313FC91F7EE5340F836AECDF5BB44B12D7F5F77E952429628DD735A87060368F3E505F8629CDA31A14612CC5508541DB0BA5362F239A49CF1D61CA6E475A24AAB1F52DC29'
-        ];
-        $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url, [
-                'headers' => [
-                    // 'User-Agent' => 'IPhone-10329-CloudPlayList',
-                    // 'dfid' => '2lzruy3psWRe3Xmp790EpFbY',
-                    // 'UNI-UserAgent' => 'iOS14.2-Phone10329-1009-0-WiFi',
-                    'x-router' => 'followservice.kugou.com',
-                ]
-            ]);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get token failed, [' . $e->getCode().'] '. $e->getMessage());
-        }
-        $result = $response->getBody()->getContents();
-        // file_put_contents('temp.txt', $result);
-        
-        // echo json_encode($response->getHeaders());die;
-        // echo $result."\n";die;
-        echo zlib_decode($result)."\n";die;
-        
-
         $url = "http://mobilecdngz.kugou.com/api/v3/singer/info";
         $param = [
             'singerid' => $singerId,
@@ -102,7 +69,7 @@ class Api {
         try {
             $response = $this->_client->get($url);
         } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get token failed, [' . $e->getCode().'] '. $e->getMessage());
+            return $this->_error('get singer info failed, [' . $e->getCode() . '] ' . $e->getMessage());
         }
         $result = $response->getBody()->getContents();
         $data = json_decode($result, true);
@@ -112,56 +79,163 @@ class Api {
         return $this->_success($data['data']);
     }
 
+
+    /**
+     * 获取歌手歌曲
+     * @param integer $singerId
+     * @param integer $page
+     * @param integer $pageSize
+     * @return array
+     */
+    public function getSingerSongs($singerId, $page = 1, $pageSize = 50)
+    {
+        $url = 'http://mobilecdnbj.kugou.com/api/v3/singer/song';
+        $param = [
+            'singerid' => $singerId,
+            'page' => $page,
+            'pagesize' => $pageSize,
+            'sorttype' => 0, // 默认按热度排序，1是按时间排序
+            'area_code' => 1
+        ];
+        $url .= '?' . http_build_query($param);
+        try {
+            $response = $this->_client->get($url);
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            return $this->_error('get singer songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        }
+        $result = $response->getBody()->getContents();
+        $result = json_decode($result, true);
+        if ($result['errcode'] != 0) {
+            return $this->_error($result['error']);
+        }
+        $data = $result['data']['info'] ?: [];
+        $songs = [];
+        foreach ($data as $val) {
+            $filename = explode('-', $val['filename']);
+            $singername = rtrim($filename[0]);
+            $songname = ltrim($filename[1]);
+            $songs[] = [
+                'id' => $val['audio_id'],
+                'album_id' => $val['album_id'],
+                'name' => $songname,
+                'hash' => $val['hash'],
+                'publish_date' => $val['publish_date'],
+                'duration' => $val['duration'],
+                'remark' => $val['remark'],
+                'sing_name' => $singername,
+                'album_audio_id' => $val['album_audio_id']
+            ];
+        }
+        return $this->_success($songs);
+    }
+
+
     /**
      * 获取歌手专辑
-     * @param string $singerId 歌手ID
+     * @param integer $singerId 歌手ID
      * @return array
      */
     public function getSingerAlbums($singerId, $page = 1, $pageSize = 50)
     {
-        $url = "https://www.kugou.com/yy/?r=singer/album";
+        $url = 'http://mobilecdnbj.kugou.com/api/v3/singer/album';
         $param = [
-            'sid' => $singerId,
-            'p' => $page
+            'singerid' => $singerId,
+            'page' => $page,
+            'pagesize' => $pageSize
         ];
-        $url .= '?'.http_build_query($param);
+        $url .= '?' . http_build_query($param);
         try {
             $response = $this->_client->get($url);
         } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get token failed, [' . $e->getCode().'] '. $e->getMessage());
+            return $this->_error('get singer albums failed, [' . $e->getCode() . '] ' . $e->getMessage());
         }
         $result = $response->getBody()->getContents();
-        echo json_encode($result, JSON_UNESCAPED_UNICODE)."\n";
-        $data = json_decode($result, true);
-        unset($data['paging']);
-        foreach ($data['data'] as &$val) {
-            unset($val['artist']);
+        $result = json_decode($result, true);
+        if ($result['errcode'] != 0) {
+            return $this->_error($result['error']);
         }
+        $data = $result['data']['info'] ?: [];
         return $this->_success($data);
     }
 
+
     /**
-     * 获取歌手热门歌曲
-     * @param string $singerId 歌手ID
+     * 获取专辑收藏数
+     * @param integer $singerId
+     * @param integer $albumId
      * @return array
      */
-    public function getSingerTopSongs($singerId)
+    public function getListCollectionNum($singerId, $albumId)
     {
-        $url = 'https://api.kkbox.com/v1.1/artists/'.$singerId.'/top-tracks?territory=HK&limit=500'; // limit最大500
-        $option = ['headers' => ['authorization' => 'Bearer '. $this->_getToken()]];
-        if ($this->_proxy) {
-            $option['proxy'] = $this->_proxy;
-        }
+        $url = 'https://gateway.kugou.com/v1/get_song_collect_status';
+        $param = [
+            'list_create_userid' => $singerId,
+            'appid' => '1005',
+            'source' => 2,
+            'list_create_listid' => $albumId,
+            'mid' => '147210170508080006059062317931575972186',
+            'clientver' => '10359',
+            'userid' => '0'
+        ];
+        $url .= '?' . http_build_query($param);
         try {
-            $response = $this->_client->get($url, $option);
+            $response = $this->_client->get($url, [
+                'headers' => ['x-router' => 'cloudlist.service.kugou.com']
+            ]);
         } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get token failed, [' . $e->getCode().'] '. $e->getMessage());
+            return $this->_error('get collection num failed, [' . $e->getCode() . '] ' . $e->getMessage());
         }
         $result = $response->getBody()->getContents();
-        $data = json_decode($result, true);
-        unset($data['paging']);
+        $result = json_decode($result, true);
+        if ($result['error_code'] != 0) {
+            return $this->_error($result['error']);
+        }
+        $data = $result['data'] ?: [];
         return $this->_success($data);
     }
+
+
+
+    /**
+     * 获取专辑信息
+     * @param mixed $albumIds
+     * @return array
+     */
+    public function getAlbumInfo($albumIds)
+    {
+        if (!is_array($albumIds)) {
+            $albumIds = explode(',', $albumIds);
+        }
+        $array = [];
+        foreach ($albumIds as $id) {
+            $array[] = ['album_id' => $id];
+        }
+        $url = 'https://gateway.kugou.com/container/v1/album';
+        $param = [
+            'appid' => 1005,
+            'clienttime' => microtime(true),
+            'clientver' => 10359,
+            'data' => $array,
+            'key' => '571faa90f10f752c15d927cbd696c526',
+            'mid' => '147210170508080006059062317931575972186',
+        ];
+        try {
+            $response = $this->_client->post($url, [
+                'headers' => ['x-router' => 'kmr.service.kugou.com'],
+                'body' => json_encode($param)
+            ]);
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            return $this->_error('get album info failed, [' . $e->getCode() . '] ' . $e->getMessage());
+        }
+        $result = $response->getBody()->getContents();
+        $result = json_decode($result, true);
+        if ($result['error_code'] != 0) {
+            return $this->_error($result['error']);
+        }
+        $data = $result['data'];
+        return $this->_success($data);
+    }
+
 
     /**
      * 获取专辑歌曲
@@ -170,131 +244,113 @@ class Api {
      */
     public function getAlbumSongs($albumId)
     {
-        $url = 'https://api.kkbox.com/v1.1/albums/'.$albumId.'/tracks?territory=HK&limit=500'; // limit最大500
-        $option = ['headers' => ['authorization' => 'Bearer '. $this->_getToken()]];
-        if ($this->_proxy) {
-            $option['proxy'] = $this->_proxy;
-        }
+        $url = 'http://mobilecdn.kugou.com/api/v3/album/song';
+        $param = [
+            'version' => '9108',
+            'albumid' => $albumId,
+            'plat' => 0,
+            'page' => 1,
+            'pagesize' => 100,
+        ];
+        $url .= '?' . http_build_query($param);
         try {
-            $response = $this->_client->get($url, $option);
+            $response = $this->_client->get($url);
         } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get token failed, [' . $e->getCode().'] '. $e->getMessage());
+            return $this->_error('get album songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
         }
         $result = $response->getBody()->getContents();
-        $data = json_decode($result, true);
-        unset($data['paging']);
-        return $this->_success($data);
+        $result = json_decode($result, true);
+        echo json_encode($result, JSON_UNESCAPED_UNICODE)."\n";die;
+        if ($result['errcode'] != 0) {
+            return $this->_error($result['error']);
+        }
+        $data = $result['data'] ?: [];
+        $songs = [];
+        foreach ($data['info'] as $val) {
+            $filename = explode('-', $val['filename']);
+            $singername = rtrim($filename[0]);
+            $songname = ltrim($filename[1]);
+            $songs[] = [
+                'id' => $val['audio_id'],
+                'album_id' => $val['album_id'],
+                'name' => $songname,
+                'hash' => $val['hash'],
+                'publish_date' => $val['publish_date'],
+                'duration' => $val['duration'],
+                'remark' => $val['remark'],
+                'sing_name' => $singername,
+                'album_audio_id' => $val['album_audio_id']
+            ];
+        }
+        return $this->_success(['songs' => $songs, 'total' => $data['total']]);
     }
 
+
     /**
-     * 获取歌曲信息
-     * @param mixed $songIds 歌曲ID
+     * 获取歌曲评论数
+     * @param string $hash
      * @return array
      */
-    public function getSongs($songIds)
+    public function getSongCommentNum($hash)
     {
-        if (is_array($songIds)) {
-            $songIds = implode(',', $songIds);
-        }
-        $url = 'https://api.kkbox.com/v1.1/tracks?ids='.$songIds.'&territory=HK';
-        $option = ['headers' => ['authorization' => 'Bearer '. $this->_getToken()]];
-        if ($this->_proxy) {
-            $option['proxy'] = $this->_proxy;
-        }
+        $url = 'https://gateway.kugou.com/index.php';
+        $param = [
+            'r' => 'comments/getcommentsnum',
+            'code' => 'fc4be23b4e972707f36b8a828a93ba8a',
+            'hash' => $hash,
+            'clienttime' => microtime(true),
+        ];
+        $url .= '?' . http_build_query($param);
         try {
-            $response = $this->_client->get($url, $option);
+            $response = $this->_client->get($url, [
+                'headers' => ['x-router' => 'sum.comment.service.kugou.com']
+            ]);
         } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get token failed, [' . $e->getCode().'] '. $e->getMessage());
+            return $this->_error('get song comments num failed, [' . $e->getCode() . '] ' . $e->getMessage());
         }
         $result = $response->getBody()->getContents();
-        $data = json_decode($result, true);
-        isset($data['data']) && $data = $data['data'];
-        return $this->_success($data);
+        $result = json_decode($result, true);
+        if (isset($result[$hash])) {
+            return $this->_success($result[$hash]);
+        }
+        return $this->_success(0);
     }
 
+
     /**
-     * 获取榜单列表
+     * 获取歌曲榜单信息
+     * @param mixed $songIds
      * @return array
      */
-    public function getCharts()
+    public function getSongRankTop($songIds)
     {
-        $url = 'https://api.kkbox.com/v1.1/charts?territory=HK';
-        $option = ['headers' => ['authorization' => 'Bearer '. $this->_getToken()]];
-        if ($this->_proxy) {
-            $option['proxy'] = $this->_proxy;
+        if (!is_array($songIds)) {
+            $songIds = explode(',', $songIds);
         }
+        $array = [];
+        foreach ($songIds as $id) {
+            $array[] = ['album_audio_id' => $id];
+        }
+        $url = 'https://gateway.kugou.com/container/v1/rank/top';
+        $param = [
+            'appid' => 1005,
+            'clienttime' => microtime(true),
+            'clientver' => 10359,
+            'data' => $array,
+            'key' => '',
+            'mid' => '147210170508080006059062317931575972186'
+        ];
         try {
-            $response = $this->_client->get($url, $option);
+            $response = $this->_client->post($url, [
+                'headers' => ['x-router' => 'kmr.service.kugou.com'],
+                'body' => json_encode($param)
+            ]);
         } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get token failed, [' . $e->getCode().'] '. $e->getMessage());
+            return $this->_error('get song rank top failed, [' . $e->getCode() . '] ' . $e->getMessage());
         }
         $result = $response->getBody()->getContents();
-        $data = json_decode($result, true);
-        unset($data['paging']);
-        return $this->_success($data);
-    }
-
-    /**
-     * 获取榜单歌曲
-     * @param string $chartId 榜单ID
-     * @return array
-     */
-    public function getChartSongs($chartId)
-    {
-        $url = 'https://api.kkbox.com/v1.1/charts/'.$chartId.'/tracks?territory=HK&limit=500';
-        $option = ['headers' => ['authorization' => 'Bearer '. $this->_getToken()]];
-        if ($this->_proxy) {
-            $option['proxy'] = $this->_proxy;
-        }
-        try {
-            $response = $this->_client->get($url, $option);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get token failed, [' . $e->getCode().'] '. $e->getMessage());
-        }
-        $result = $response->getBody()->getContents();
-        $data = json_decode($result, true);
-        unset($data['paging']);
-        return $this->_success($data);
-        
-    }
-
-    /**
-     * 获取歌手所在榜单
-     * @param string $singerIds 歌手ID
-     * @return array
-     */
-    public function getSingerCharts($singerIds)
-    {
-        if (!is_array($singerIds)) {
-            $singerIds = explode(',', $singerIds);
-        }
-        $singerIds = array_flip($singerIds);
-        $charts = $this->getCharts()['data'];
-        if (!$charts) {
-            return $this->_error('no charts found.');
-        }
-        $data = [];
-        foreach ($charts['data'] as $chart) {
-            $list = $this->getChartSongs($chart['id'])['data'];
-            if (!$list) {
-                continue;
-            }
-            $songs = [];
-            foreach ($list['data'] as $key => $song) {
-                $singer = $song['album']['artist'];
-                if (isset($singerIds[$singer['id']])) {
-                    $song['rank'] = $key + 1;
-                    $songs[] = $song;
-                }
-            }
-            if ($songs) {
-                $data[] = [
-                    'chart' => $chart,
-                    'songs' => $songs
-                ];
-            }
-        }
-        return $this->_success($data);
+        $result = json_decode($result, true);
+        echo json_encode($result, JSON_UNESCAPED_UNICODE)."\n";die;
     }
 
 
@@ -307,6 +363,4 @@ class Api {
     {
         return ['ret' => false, 'data' => null, 'msg' => $msg];
     }
-
-
 }
