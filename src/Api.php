@@ -350,7 +350,12 @@ class Api
         }
         $result = $response->getBody()->getContents();
         $result = json_decode($result, true);
-        echo json_encode($result, JSON_UNESCAPED_UNICODE)."\n";die;
+        if ($result['error_code'] != 0) {
+            return $this->_error($result['error_code']);
+        }
+        $data = $result['data'] ?: [];
+        $data = array_filter($data);
+        return $this->_success($data);
     }
 
 
