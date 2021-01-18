@@ -9,6 +9,8 @@ class Api
 
     protected $_client;
 
+    private $_errmsg;
+
     public function __construct()
     {
         $this->_client = new Client();
@@ -33,19 +35,18 @@ class Api
             'keyword' => $keyword
         ];
         $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url, [
-                'headers' => ['x-router' => 'msearch.kugou.com']
-            ]);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('search failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $options = ['headers' => ['x-router' => 'msearch.kugou.com']];
+        $result = $this->_sendRequest('get', $url, $options);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
+
         if ($result['errcode'] != 0) {
             return $this->_error($result['error']);
         }
         $data = $result['data']['info'] ?: [];
+
         return $this->_success($data);
     }
 
@@ -66,17 +67,17 @@ class Api
             'with_listener_index' => 1
         ];
         $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get singer info failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $result = $this->_sendRequest('get', $url);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $data = json_decode($result, true);
-        if ($data['errcode'] != 0) {
-            return $this->_error($data['error']);
+
+        if ($result['errcode'] != 0) {
+            return $this->_error($result['error']);
         }
-        return $this->_success($data['data']);
+
+        return $this->_success($result['data']);
     }
 
 
@@ -98,16 +99,16 @@ class Api
             'area_code' => 1
         ];
         $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get singer songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $result = $this->_sendRequest('get', $url);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
+
         if ($result['errcode'] != 0) {
             return $this->_error($result['error']);
         }
+
         $data = $result['data']['info'] ?: [];
         $songs = [];
         foreach ($data as $val) {
@@ -126,6 +127,7 @@ class Api
                 'album_audio_id' => $val['album_audio_id']
             ];
         }
+
         return $this->_success($songs);
     }
 
@@ -144,17 +146,17 @@ class Api
             'pagesize' => $pageSize
         ];
         $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get singer albums failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $result = $this->_sendRequest('get', $url);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
+
         if ($result['errcode'] != 0) {
             return $this->_error($result['error']);
         }
         $data = $result['data']['info'] ?: [];
+
         return $this->_success($data);
     }
 
@@ -178,19 +180,18 @@ class Api
             'userid' => '0'
         ];
         $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url, [
-                'headers' => ['x-router' => 'cloudlist.service.kugou.com']
-            ]);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get collection num failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $options = ['headers' => ['x-router' => 'cloudlist.service.kugou.com']];
+        $result = $this->_sendRequest('get', $url, $options);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
+
         if ($result['error_code'] != 0) {
             return $this->_error($result['error']);
         }
         $data = $result['data'] ?: [];
+
         return $this->_success($data);
     }
 
@@ -219,20 +220,18 @@ class Api
             'key' => '571faa90f10f752c15d927cbd696c526',
             'mid' => '147210170508080006059062317931575972186',
         ];
-        try {
-            $response = $this->_client->post($url, [
-                'headers' => ['x-router' => 'kmr.service.kugou.com'],
-                'body' => json_encode($param)
-            ]);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get album info failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $options = ['headers' => ['x-router' => 'kmr.service.kugou.com'], 'body' => json_encode($param)];
+        $result = $this->_sendRequest('post', $url, $options);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
+
         if ($result['error_code'] != 0) {
             return $this->_error($result['error']);
         }
         $data = $result['data'];
+
         return $this->_success($data);
     }
 
@@ -253,18 +252,16 @@ class Api
             'pagesize' => 100,
         ];
         $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get album songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $result = $this->_sendRequest('get', $url);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
-        echo json_encode($result, JSON_UNESCAPED_UNICODE) . "\n";
-        die;
+
         if ($result['errcode'] != 0) {
             return $this->_error($result['error']);
         }
+
         $data = $result['data'] ?: [];
         $songs = [];
         foreach ($data['info'] as $val) {
@@ -283,6 +280,7 @@ class Api
                 'album_audio_id' => $val['album_audio_id']
             ];
         }
+
         return $this->_success(['songs' => $songs, 'total' => $data['total']]);
     }
 
@@ -302,18 +300,17 @@ class Api
             'clienttime' => microtime(true),
         ];
         $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url, [
-                'headers' => ['x-router' => 'sum.comment.service.kugou.com']
-            ]);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get song comments num failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $options = ['headers' => ['x-router' => 'sum.comment.service.kugou.com']];
+        $result = $this->_sendRequest('get', $url, $options);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
+
         if (isset($result[$hash])) {
             return $this->_success($result[$hash]);
         }
+
         return $this->_success(0);
     }
 
@@ -341,21 +338,20 @@ class Api
             'key' => '',
             'mid' => '147210170508080006059062317931575972186'
         ];
-        try {
-            $response = $this->_client->post($url, [
-                'headers' => ['x-router' => 'kmr.service.kugou.com'],
-                'body' => json_encode($param)
-            ]);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get song rank top failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $options = ['headers' => ['x-router' => 'kmr.service.kugou.com'], 'body' => json_encode($param)];
+        $result = $this->_sendRequest('post', $url, $options);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
+
         if ($result['error_code'] != 0) {
             return $this->_error($result['error_code']);
         }
+
         $data = $result['data'] ?: [];
         $data = array_filter($data);
+
         return $this->_success($data);
     }
 
@@ -374,17 +370,17 @@ class Api
             'rankid' => $rankId
         ];
         $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get song rank top failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $result = $this->_sendRequest('get', $url);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
+
         if ($result['errcode'] != 0) {
             return $this->_error($result['error']);
         }
         $info = $result['data'];
+
         // 榜单歌曲
         $url = 'http://mobilecdnbj.kugou.com/api/v3/rank/song';
         $param = [
@@ -398,13 +394,12 @@ class Api
             $param['volid'] = $volid;
         }
         $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get chart songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $result = $this->_sendRequest('get', $url);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
+
         $data = $result['data']['info'] ?: [];
         $songs = [];
         foreach ($data as $key => $val) {
@@ -424,6 +419,7 @@ class Api
                 'top_id' => $rankId
             ];
         }
+
         return $this->_success($songs);
     }
 
@@ -441,14 +437,12 @@ class Api
             'rankid' => $rankId
         ];
         $url .= '?' . http_build_query($param);
-        try {
-            $response = $this->_client->get($url);
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            return $this->_error('get history chart songs failed, [' . $e->getCode() . '] ' . $e->getMessage());
+
+        $result = $this->_sendRequest('get', $url);
+        if ($result === false) {
+            return $this->_error();
         }
-        $result = $response->getBody()->getContents();
-        $result = json_decode($result, true);
-        echo json_encode($result, JSON_UNESCAPED_UNICODE)."\n";die;
+        
         if ($result['errcode'] != 0) {
             return $this->_error($result['error']);
         }
@@ -463,6 +457,7 @@ class Api
                 $ranklist = array_merge($ranklist, $songs);
             }
         }
+
         return $this->_success($ranklist);
     }
 
@@ -500,13 +495,39 @@ class Api
     }
 
 
+    private function _sendRequest($method, $url, $option = [])
+    {
+        try {
+            if ($method == 'post') {
+                $response = $this->_client->post($url, $option);
+            } else {
+                $response = $this->_client->get($url, $option);
+            }
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            return $this->_error(__METHOD__. ', client error, [' . $e->getCode() . '] ' . $e->getMessage(), false);
+        } catch (\GuzzleHttp\Exception\ServerException $e) {
+            return $this->_error(__METHOD__. ', server error, [' . $e->getCode() . '] ' . $e->getMessage(), false);
+        } catch (\Exception $e) {
+            return $this->_error(__METHOD__. ', other error, [' . $e->getCode() . '] ' . $e->getMessage(), false);
+        }
+
+        $result = $response->getBody()->getContents();
+        return json_decode($result, true);
+    }
+
+
     private function _success($data = [])
     {
         return ['ret' => true, 'data' => $data, 'msg' => ''];
     }
 
-    private function _error($msg = '')
+    private function _error($msg = '', $isArray = true)
     {
-        return ['ret' => false, 'data' => null, 'msg' => $msg];
+        if ($isArray) {
+            return ['ret' => false, 'data' => null, 'msg' => $msg ?: $this->_errmsg];
+        }
+        
+        $this->_errmsg = $msg;
+        return false;
     }
 }
